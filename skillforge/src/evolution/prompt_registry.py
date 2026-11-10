@@ -18,6 +18,11 @@ class PromptRegistryError(ValueError):
     """Raised when prompt registry data or an operation is invalid."""
 
 
+def normalize_prompt(text: str) -> str:
+    """Ignore capitalization and whitespace when detecting repeated proposals."""
+    return " ".join(text.split()).casefold()
+
+
 @dataclass(frozen=True)
 class PromptVersion:
     prompt_id: str
@@ -28,6 +33,7 @@ class PromptVersion:
     status: str
     training_metrics: Dict[str, float]
     validation_metrics: Dict[str, float]
+    trigger_decision_id: Optional[str] = None
 
 
 def _metric_map(value, field_name: str) -> Dict[str, float]:
@@ -97,6 +103,7 @@ def _prompt_from_record(record, index: int) -> PromptVersion:
         validation_metrics=_metric_map(
             record.get("validation_metrics"), "validation_metrics"
         ),
+        trigger_decision_id=record.get("trigger_decision_id"),
     )
 
 
@@ -110,7 +117,15 @@ def _validate_versions(versions: Iterable[PromptVersion]) -> Tuple[PromptVersion
         raise PromptRegistryError("prompt registry contains duplicate prompt IDs")
 
     known_ids = set(prompt_ids)
+    trigger_ids = set()
     for version in versions:
+        trigger_id = version.trigger_decision_id
+        if trigger_id is not None:
+            if not isinstance(trigger_id, str) or not trigger_id.strip():
+                raise PromptRegistryError("trigger_decision_id must be a non-empty string or null")
+            if trigger_id in trigger_ids:
+                raise PromptRegistryError("duplicate trigger_decision_id in prompt registry")
+            trigger_ids.add(trigger_id)
         if version.parent_prompt_id is not None:
             if version.parent_prompt_id == version.prompt_id:
                 raise PromptRegistryError(
@@ -208,6 +223,17 @@ class PromptRegistry:
     def versions(self) -> Tuple[PromptVersion, ...]:
         return self._versions
 
+    def refresh(self) -> None:
+        self._versions = self._read()
+
+    def rejected_duplicate(self, prompt_text: str) -> Optional[PromptVersion]:
+        normalized = normalize_prompt(prompt_text)
+        return next((v for v in self._versions
+                     if v.status == "rejected" and normalize_prompt(v.prompt_text) == normalized), None)
+
+    def candidate_for_trigger(self, decision_id: str) -> Optional[PromptVersion]:
+        return next((v for v in self._versions if v.trigger_decision_id == decision_id), None)
+
     @property
     def active_prompt(self) -> PromptVersion:
         return next(
@@ -235,6 +261,7 @@ class PromptRegistry:
         training_metrics: Optional[Dict[str, float]] = None,
         validation_metrics: Optional[Dict[str, float]] = None,
         created_at: Optional[str] = None,
+        trigger_decision_id: Optional[str] = None,
     ) -> PromptVersion:
         """Persist a candidate without changing the current active prompt."""
         if not isinstance(prompt_text, str) or not prompt_text.strip():
@@ -255,6 +282,7 @@ class PromptRegistry:
             validation_metrics=_metric_map(
                 validation_metrics, "validation_metrics"
             ),
+            trigger_decision_id=trigger_decision_id,
         )
         self._write((*self._versions, candidate))
         return candidate

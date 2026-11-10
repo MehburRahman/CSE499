@@ -171,7 +171,23 @@ def test_mixed_language_benchmark_history_hidden_evaluation_and_resume(tmp_path,
         assert hidden_evidence["execution_contract"] == {
             "language": "javascript", "execution_mode": "function", "entry_point": "solve",
         }
-        assert "913" not in json.dumps(judge.payloads) and "1340" not in json.dumps(judge.payloads)
+        def payload_leaves(value):
+            if isinstance(value, dict):
+                for item in (*value.keys(), *value.values()):
+                    yield from payload_leaves(item)
+            elif isinstance(value, list):
+                for item in value:
+                    yield from payload_leaves(item)
+            else:
+                yield value
+
+        # Hidden literals must not reach the judge. Searching serialized JSON
+        # also matched incidental digits inside measured runtime floats.
+        for value in payload_leaves(judge.payloads):
+            if isinstance(value, str):
+                assert "913" not in value and "1340" not in value
+            else:
+                assert value not in (913, 1340)
         assert all("913" not in r["prompt"] for r in client.requests)
         resumed_client = Analyzer(())
         resumed = run_benchmark(resumed_client, history_store=store, resume=True, **options)

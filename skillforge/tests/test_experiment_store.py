@@ -258,7 +258,7 @@ def test_migrates_v1_history_schema_without_removing_existing_runs(tmp_path):
             "SELECT value FROM metadata WHERE key = 'schema_version'"
         ).fetchone()["value"]
 
-    assert schema_version == "6"
+    assert schema_version == "8"
     assert old_run["task_id"] == "old-task"
     assert old_run["attempt_budget"] is None
     assert old_run["attempt_budget_source"] is None
@@ -361,7 +361,7 @@ def test_migrates_v2_history_schema_without_removing_existing_runs(tmp_path):
             "SELECT value FROM metadata WHERE key = 'schema_version'"
         ).fetchone()["value"]
 
-    assert schema_version == "6"
+    assert schema_version == "8"
     assert old_run["task_id"] == "old-task"
     assert old_run["attempt_budget"] == 3
     assert new_run["judge_model"] == "llama3.1:8b"
@@ -537,7 +537,7 @@ def test_migrates_v3_preserving_model_costs_and_adds_resume_tables(tmp_path):
         assert row["benchmark_run_id"] is None
         assert row["analysis_model_calls"] is None
         assert row["task_spec_cache_hit"] is None
-        assert store._connection.execute("SELECT value FROM metadata").fetchone()[0] == "6"
+        assert store._connection.execute("SELECT value FROM metadata").fetchone()[0] == "8"
         assert store._connection.execute("SELECT COUNT(*) FROM benchmark_runs").fetchone()[0] == 0
         assert store._connection.execute("SELECT COUNT(*) FROM benchmark_tasks").fetchone()[0] == 0
 
@@ -559,7 +559,7 @@ def test_migrates_v4_without_changing_existing_runs_or_benchmark_checkpoints(tmp
             """)
     with ExperimentStore(path) as store:
         assert store.get_run(run_id) == original_run
-        assert store._connection.execute("SELECT value FROM metadata").fetchone()[0] == "6"
+        assert store._connection.execute("SELECT value FROM metadata").fetchone()[0] == "8"
         assert store._connection.execute("SELECT checkpoint_json FROM benchmark_tasks").fetchone()[0] == '{"attempt":2}'
         assert store._connection.execute("SELECT COUNT(*) FROM judge_sanity_runs").fetchone()[0] == 0
         assert store._connection.execute("SELECT COUNT(*) FROM judge_sanity_results").fetchone()[0] == 0

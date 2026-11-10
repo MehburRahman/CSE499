@@ -164,3 +164,25 @@ def test_unknown_prompt_id_has_clear_error(tmp_path):
 
     with pytest.raises(PromptRegistryError, match="unknown prompt ID: P9"):
         registry.get("P9")
+
+
+def test_trigger_link_is_persistent_and_unique(tmp_path):
+    path = tmp_path / "prompts.json"
+    write_registry(path)
+    registry = PromptRegistry(path)
+    candidate = registry.register_candidate("Candidate", "Reason", trigger_decision_id="decision-1")
+    assert PromptRegistry(path).candidate_for_trigger("decision-1") == candidate
+    assert PromptRegistry(path).get("P0").trigger_decision_id is None
+    with pytest.raises(PromptRegistryError, match="duplicate trigger_decision_id"):
+        registry.register_candidate("Another candidate", "Reason", trigger_decision_id="decision-1")
+    assert len(PromptRegistry(path).versions) == 2
+
+
+@pytest.mark.parametrize("invalid", ["", " ", 42, []])
+def test_invalid_trigger_link_does_not_change_registry(tmp_path, invalid):
+    path = tmp_path / "prompts.json"
+    write_registry(path)
+    registry = PromptRegistry(path)
+    with pytest.raises(PromptRegistryError, match="trigger_decision_id"):
+        registry.register_candidate("Candidate", "Reason", trigger_decision_id=invalid)
+    assert len(PromptRegistry(path).versions) == 1

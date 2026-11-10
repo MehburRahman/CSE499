@@ -101,26 +101,13 @@ def run_benchmark(
 
     registry = prompt_registry or load_default_registry()
     selected_prompt = registry.get(prompt_id) if prompt_id else registry.active_prompt
-    manifest = {
-        "protocol": 1,
-        "dataset_hash": _fingerprint(sorted((_dataset_record(t) for t in dataset.tasks), key=lambda t: t["task_id"])),
-        "task_ids": sorted(task.task_id for task in selected_tasks),
-        "prompt_id": selected_prompt.prompt_id,
-        "prompt_hash": _fingerprint(selected_prompt.prompt_text),
-        "prompt_templates": prompt_template_identity(),
-        "evaluation_policy": evaluation_policy_identity(),
-        "generator_model": getattr(client, "model", "unknown"),
-        "judge_model": getattr(judge_client, "model", "unknown") if judge_client is not None else None,
-        "config_name": config_name,  # None preserves the legacy dynamic/repeat policy.
-        "seed": seed, "language": language, "max_attempts": max_attempts,
-        "max_feedback_failures": max_feedback_failures,
-        "max_consecutive_repeats": max_consecutive_repeats,
-        "judge_max_attempts": judge_max_attempts,
-        "judge_review_threshold": judge_review_threshold,
-        "seed_policy": SEED_POLICY,
-        "analyzer": analyzer_fingerprint(),
-        "cache_policy": [CACHE_VERSION, ANALYSIS_SEED] if task_spec_cache is not None else None,
-    }
+    manifest = benchmark_manifest(
+        client, dataset, selected_tasks, selected_prompt,
+        config_name=config_name, seed=seed, language=language, max_attempts=max_attempts,
+        max_feedback_failures=max_feedback_failures, max_consecutive_repeats=max_consecutive_repeats,
+        judge_client=judge_client, judge_max_attempts=judge_max_attempts,
+        judge_review_threshold=judge_review_threshold, task_spec_cache=task_spec_cache,
+    )
     if history_store is not None:
         run_id = history_store.begin_benchmark(manifest, run_id=run_id, resume=resume)
         if on_sweep_start is not None:
@@ -221,6 +208,34 @@ def run_benchmark(
             history_store.finish_benchmark(run_id)
         )
     return summary
+
+
+def benchmark_manifest(client, dataset, selected_tasks, selected_prompt, *,
+                       config_name=None, seed=None, language="python", max_attempts=None,
+                       max_feedback_failures=3, max_consecutive_repeats=2,
+                       judge_client=None, judge_max_attempts=3, judge_review_threshold=0.5,
+                       task_spec_cache=None):
+    """Describe a sweep before executing it, also used to reserve paired runs."""
+    return {
+        "protocol": 1,
+        "dataset_hash": _fingerprint(sorted((_dataset_record(t) for t in dataset.tasks), key=lambda t: t["task_id"])),
+        "task_ids": sorted(task.task_id for task in selected_tasks),
+        "prompt_id": selected_prompt.prompt_id,
+        "prompt_hash": _fingerprint(selected_prompt.prompt_text),
+        "prompt_templates": prompt_template_identity(),
+        "evaluation_policy": evaluation_policy_identity(),
+        "generator_model": getattr(client, "model", "unknown"),
+        "judge_model": getattr(judge_client, "model", "unknown") if judge_client is not None else None,
+        "config_name": config_name,  # None preserves the legacy dynamic/repeat policy.
+        "seed": seed, "language": language, "max_attempts": max_attempts,
+        "max_feedback_failures": max_feedback_failures,
+        "max_consecutive_repeats": max_consecutive_repeats,
+        "judge_max_attempts": judge_max_attempts,
+        "judge_review_threshold": judge_review_threshold,
+        "seed_policy": SEED_POLICY,
+        "analyzer": analyzer_fingerprint(),
+        "cache_policy": [CACHE_VERSION, ANALYSIS_SEED] if task_spec_cache is not None else None,
+    }
 
 
 def _fingerprint(value):
